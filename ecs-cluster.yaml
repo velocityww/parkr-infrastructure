@@ -1,0 +1,1104 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: "Creates a VPC with Managed NAT"
+Parameters:
+
+  Environment:
+    Description: The name of the VPC being created.
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - uat
+      - prod
+    ConstraintDescription: must specify dev/uat/prod
+
+  Certificate:
+    Type: String
+    # Update with the certificate ARN from Certificate Manager, which must exist in the same region.
+    Default: "arn:aws:acm:eu-west-1:374731217161:certificate/812e4eb9-0e36-4eb1-8d30-0c62cb642f74"
+
+Mappings:
+  dev:
+    VPC:
+      CIDR: "172.16.0.0/16"
+    Public0:
+      CIDR: "172.16.0.0/24"
+    Public1:
+      CIDR: "172.16.1.0/24"
+    Private0:
+      CIDR: "172.16.2.0/24"
+    Private1:
+      CIDR: "172.16.3.0/24"
+  uat:
+    VPC:
+      CIDR: "172.17.0.0/16"
+    Public0:
+      CIDR: "172.17.0.0/24"
+    Public1:
+      CIDR: "172.17.1.0/24"
+    Private0:
+      CIDR: "172.17.2.0/24"
+    Private1:
+      CIDR: "172.17.3.0/24"
+  prod:
+    VPC:
+      CIDR: "172.18.0.0/16"
+    Public0:
+      CIDR: "172.18.0.0/24"
+    Public1:
+      CIDR: "172.18.1.0/24"
+    Private0:
+      CIDR: "172.18.2.0/24"
+    Private1:
+      CIDR: "172.18.3.0/24"
+  # This mapping accounts for the scenario when certain AZs
+  # are not available to use (this differs on a per account
+  # per customer basis). E.g., if the 'b' AZ is not available
+  # in a specific region in one's account then updating the
+  # list contained in the mapping below here will allow a
+  # different AZ to be chosen.
+  AZRegions:
+    ap-northeast-1:
+      AZs: ["a", "b"]
+    ap-northeast-2:
+      AZs: ["a", "b"]
+    ap-south-1:
+      AZs: ["a", "b"]
+    ap-southeast-1:
+      AZs: ["a", "b"]
+    ap-southeast-2:
+      AZs: ["a", "b"]
+    ca-central-1:
+      AZs: ["a", "b"]
+    eu-central-1:
+      AZs: ["a", "b"]
+    eu-west-1:
+      AZs: ["a", "b"]
+    eu-west-2:
+      AZs: ["a", "b"]
+    sa-east-1:
+      AZs: ["a", "b"]
+    us-east-1:
+      AZs: ["a", "b"]
+    us-east-2:
+      AZs: ["a", "b"]
+    us-west-1:
+      AZs: ["a", "b"]
+    us-west-2:
+      AZs: ["a", "b"]
+
+Resources:
+
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      CidrBlock:
+        Fn::FindInMap:
+          - !Ref Environment
+          - "VPC"
+          - "CIDR"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-vpc-'
+              - !Ref 'Environment'
+
+  PublicSubnet0:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock:
+        Fn::FindInMap:
+          - !Ref Environment
+          - "Public0"
+          - "CIDR"
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'park'
+              - '-subnet-'
+              - !Ref Environment
+              - '-public-'
+              - !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+
+  PublicSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock:
+        Fn::FindInMap:
+          - !Ref Environment
+          - "Public1"
+          - "CIDR"
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'park'
+              - '-subnet-'
+              - !Ref Environment
+              - '-public-'
+              - !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+
+  PrivateSubnet0:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock:
+        Fn::FindInMap:
+          - !Ref Environment
+          - "Private0"
+          - "CIDR"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Private"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'park'
+              - '-subnet-'
+              - !Ref "Environment"
+              - '-private-'
+              - !Select [ 0, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+
+  PrivateSubnet1:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      AvailabilityZone:
+        Fn::Sub:
+          - "${AWS::Region}${AZ}"
+          - AZ: !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+      CidrBlock:
+        Fn::FindInMap:
+          - !Ref Environment
+          - "Private1"
+          - "CIDR"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Private"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-subnet-'
+              - !Ref "Environment"
+              - '-private-'
+              - !Select [ 1, !FindInMap [ "AZRegions", !Ref "AWS::Region", "AZs" ] ]
+
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-'
+              - !Ref "Environment"
+              - '-IGW'
+
+  GatewayToInternet:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      InternetGatewayId:
+        Ref: "InternetGateway"
+
+  PublicRouteTable:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-'
+              - !Ref "Environment"
+              - '-public-route-table'
+
+  PublicRoute:
+    Type: "AWS::EC2::Route"
+    DependsOn: "GatewayToInternet"
+    Properties:
+      RouteTableId:
+        Ref: "PublicRouteTable"
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId:
+        Ref: "InternetGateway"
+
+  PublicSubnetRouteTableAssociation0:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PublicSubnet0"
+      RouteTableId:
+        Ref: "PublicRouteTable"
+
+  PublicSubnetRouteTableAssociation1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PublicSubnet1"
+      RouteTableId:
+        Ref: "PublicRouteTable"
+
+  PublicNetworkAcl:
+    Type: "AWS::EC2::NetworkAcl"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        -
+          Key: "Application"
+          Value:
+            Ref: "AWS::StackName"
+        -
+          Key: "Network"
+          Value: "Public"
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-'
+              - !Ref "Environment"
+              - '-public-nacl'
+
+  InboundHTTPPublicNetworkAclEntry:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId:
+        Ref: "PublicNetworkAcl"
+      RuleNumber: "10"
+      Protocol: "-1"
+      RuleAction: "allow"
+      Egress: "false"
+      CidrBlock: "0.0.0.0/0"
+      PortRange:
+        From: "0"
+        To: "65535"
+
+  OutboundPublicNetworkAclEntry:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId:
+        Ref: "PublicNetworkAcl"
+      RuleNumber: "10"
+      Protocol: "-1"
+      RuleAction: "allow"
+      Egress: "true"
+      CidrBlock: "0.0.0.0/0"
+      PortRange:
+        From: "0"
+        To: "65535"
+
+  PublicSubnetNetworkAclAssociation0:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PublicSubnet0"
+      NetworkAclId:
+        Ref: "PublicNetworkAcl"
+
+  PublicSubnetNetworkAclAssociation1:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PublicSubnet1"
+      NetworkAclId:
+        Ref: "PublicNetworkAcl"
+
+  ElasticIP0:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+
+  ElasticIP1:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: "vpc"
+
+  NATGateway0:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - "ElasticIP0"
+          - "AllocationId"
+      SubnetId:
+        Ref: "PublicSubnet0"
+
+  NATGateway1:
+    Type: "AWS::EC2::NatGateway"
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - "ElasticIP1"
+          - "AllocationId"
+      SubnetId:
+        Ref: "PublicSubnet1"
+
+  PrivateRouteTable0:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-'
+              - !Ref "Environment"
+              - '-private-route-table-0'
+
+  PrivateRouteTable1:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId:
+        Ref: "VPC"
+      Tags:
+        -
+          Key: "Name"
+          Value: !Join
+            - ''
+            - - 'parkr'
+              - '-'
+              - !Ref "Environment"
+              - '-private-route-table-1'
+
+  PrivateRouteToInternet0:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Ref: "PrivateRouteTable0"
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId:
+        Ref: "NATGateway0"
+
+  PrivateRouteToInternet1:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId:
+        Ref: "PrivateRouteTable1"
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId:
+        Ref: "NATGateway1"
+
+  PrivateSubnetRouteTableAssociation0:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PrivateSubnet0"
+      RouteTableId:
+        Ref: "PrivateRouteTable0"
+
+  PrivateSubnetRouteTableAssociation1:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId:
+        Ref: "PrivateSubnet1"
+      RouteTableId:
+        Ref: "PrivateRouteTable1"
+
+  # ECS Resources for both frontend and backend
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+ 
+  # ECR Resources for backend
+  ECRrepoFrontEnd:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Join
+        - '-'
+        - - 'parkr'
+          - 'frontend'
+          - !Ref "Environment"
+
+  # ECR Resources for backend
+  ECRrepoBackEnd:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Join
+        - '-'
+        - - 'parkr'
+          - 'backend'
+          - !Ref "Environment"
+
+  FargateContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the Fargate containers
+      VpcId: !Ref 'VPC'
+
+  EcsSecurityGroupIngressFromPublicALB:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from the public ALB
+      GroupId: !Ref 'FargateContainerSecurityGroup'
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref 'PublicLoadBalancerSG'
+
+  EcsSecurityGroupIngressFromSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from other containers in the same security group
+      GroupId: !Ref 'FargateContainerSecurityGroup'
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref 'FargateContainerSecurityGroup'
+
+  # A public facing load balancer, this is used for accepting traffic from the public
+  # internet and directing it to public facing microservices
+  PublicLoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the public facing load balancer
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+          # Allow access to ALB from anywhere on the internet
+          - CidrIp: 0.0.0.0/0
+            IpProtocol: -1
+
+  PublicLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: GatewayToInternet
+    Properties:
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '30'
+      Subnets:
+        # The load balancer is placed into the public subnets, so that traffic
+        # from the internet can reach the load balancer directly via the internet gateway
+        - !Ref PublicSubnet0
+        - !Ref PublicSubnet1
+      SecurityGroups: [!Ref 'PublicLoadBalancerSG']
+
+  TargetGroupPublicFrontend:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: !Join ['-', [!Ref 'AWS::StackName', 'group01']]
+      Port: 8008
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref 'VPC'
+
+  TargetGroupPublicBackend:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /api/healthcheck
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: !Join ['-', [!Ref 'AWS::StackName', 'group02']]
+      Port: 8000
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId: !Ref 'VPC'
+
+  PublicLoadBalancerListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - PublicLoadBalancer
+    Properties:
+      DefaultActions:
+        - RedirectConfig: 
+            Protocol: "HTTPS"
+            Port: "443"
+            Host: "#{host}"
+            Path: "/#{path}"
+            Query: "#{query}"
+            StatusCode: "HTTP_301"
+          Type: 'redirect'
+      LoadBalancerArn: !Ref 'PublicLoadBalancer'
+      Port: 80
+      Protocol: HTTP
+
+  PublicLoadBalancerListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - PublicLoadBalancer
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref 'TargetGroupPublicFrontend'
+          Type: 'forward'
+      LoadBalancerArn: !Ref 'PublicLoadBalancer'
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: "ELBSecurityPolicy-2016-08"
+      Certificates:
+        - CertificateArn: !Ref 'Certificate' 
+
+  PublicHTTPSListenerRuleFrontend:
+    Type: "AWS::ElasticLoadBalancingV2::ListenerRule"
+    Properties:
+        Priority: "1"
+        ListenerArn: !Ref PublicLoadBalancerListenerHTTPS
+        Conditions: 
+          - 
+            Field: 'host-header'
+            Values: 
+              -
+                !Join ['', ['frontend', '-', !Ref 'Environment', '.theparkr.com']]
+        Actions: 
+          - 
+            Type: "forward"
+            TargetGroupArn: !Ref TargetGroupPublicFrontend
+            Order: 1
+            ForwardConfig: 
+              TargetGroups: 
+                - 
+                  TargetGroupArn: !Ref TargetGroupPublicFrontend
+                  Weight: 1
+              TargetGroupStickinessConfig: 
+                  Enabled: false
+
+  PublicHTTPSListenerRuleBackend:
+    Type: "AWS::ElasticLoadBalancingV2::ListenerRule"
+    Properties:
+        Priority: "2"
+        ListenerArn: !Ref PublicLoadBalancerListenerHTTPS
+        Conditions: 
+          - 
+            Field: 'host-header'
+            Values: 
+              -
+                !Join ['', ['backend', '-', !Ref 'Environment', '.theparkr.com']]
+        Actions: 
+          - 
+            Type: "forward"
+            TargetGroupArn: !Ref TargetGroupPublicBackend
+            Order: 1
+            ForwardConfig: 
+              TargetGroups: 
+                - 
+                  TargetGroupArn: !Ref TargetGroupPublicBackend
+                  Weight: 1
+              TargetGroupStickinessConfig: 
+                  Enabled: false
+                  
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+
+                # Enable remote commands on the ECS tasks
+                - "ssmmessages:CreateControlChannel"
+                - "ssmmessages:CreateDataChannel"
+                - "ssmmessages:OpenControlChannel"
+                - "ssmmessages:OpenDataChannel" 
+
+                # Allow the ECS task to read secrets from Secret Manager
+                - "secretsmanager:GetSecretValue"
+                - "secretsmanager:GetResourcePolicy"
+                - "secretsmanager:DescribeSecret"
+                - "secretsmanager:ListSecretVersionIds"
+
+              # Allow the ECS task to read/write access to EFS
+                - elasticfilesystem:ClientMount
+                - elasticfilesystem:ClientWrite
+                - elasticfilesystem:ClientRootAccess
+              Resource: '*'
+
+  CloudMap:
+    Properties:
+      Description: Service Map for Parkr containers
+      Name: !Join ['.', [ !Ref 'Environment', 'local']]
+      Vpc: !Ref 'VPC'
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+
+  RedisService:
+    Properties:
+      Cluster:
+        Fn::GetAtt:
+        - ECSCluster
+        - Arn
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+          - Ref: FargateContainerSecurityGroup
+          Subnets:
+          - Ref: PrivateSubnet0
+          - Ref: PrivateSubnet0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - RedisServiceDiscoveryEntry
+          - Arn
+      TaskDefinition:
+        Ref: RedisTaskDefinition
+    Type: AWS::ECS::Service
+
+  RedisServiceDiscoveryEntry:
+    Properties:
+      Description: '"redis" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: redis
+      NamespaceId:
+        Ref: CloudMap
+    Type: AWS::ServiceDiscovery::Service
+
+  RedisTaskDefinition:
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - eu-west-1.compute.internal
+        - !Join ['.', [ !Ref 'Environment', 'local']]
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: RedisResolverLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+        Name: redis_resolver
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: redis_resolver
+        Name: redis
+        Cpu: 256
+        Memory: 512
+        Essential: true
+        Image: redis
+        PortMappings:
+        - ContainerPort: 6379
+          HostPort: 6379
+          Protocol: tcp
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: RedisLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn:
+        Ref: ECSTaskExecutionRole
+      TaskRoleArn:
+        Ref: ECSRole
+      Family: redis
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+    Type: AWS::ECS::TaskDefinition
+
+  RedisLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, 'redis', '-', !Ref 'Environment', '-', TaskDefinition]]
+
+  RedisResolverLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, 'redis', '-resolver-', !Ref 'Environment', '-', TaskDefinition]]
+
+  DbService:
+    DependsOn:
+      - DbDataNFSMountTargetOnPrivateSubnet0
+      - DbDataNFSMountTargetOnPrivateSubnet1
+    Properties:
+      Cluster:
+        Fn::GetAtt:
+        - ECSCluster
+        - Arn
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      DeploymentController:
+        Type: ECS
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          SecurityGroups:
+          - Ref: FargateContainerSecurityGroup
+          Subnets:
+          - Ref: PrivateSubnet0
+          - Ref: PrivateSubnet0
+      # PlatformVersion: 1.4.0
+      PropagateTags: SERVICE
+      SchedulingStrategy: REPLICA
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - DbServiceDiscoveryEntry
+          - Arn
+      TaskDefinition:
+        Ref: DbTaskDefinition
+    Type: AWS::ECS::Service
+
+  DbServiceDiscoveryEntry:
+    Properties:
+      Description: '"db" service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: db
+      NamespaceId:
+        Ref: CloudMap
+    Type: AWS::ServiceDiscovery::Service
+
+  DbTaskDefinition:
+    Properties:
+      ContainerDefinitions:
+      - Command:
+        - eu-west-1.compute.internal
+        - !Join ['.', [ !Ref 'Environment', 'local']]
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: DbResolverLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+        Name: db-resolver
+      - DependsOn:
+        - Condition: SUCCESS
+          ContainerName: db-resolver
+        Name: db
+        Cpu: 256
+        Memory: 512
+        Image: postgres
+        PortMappings:
+        - ContainerPort: 5432
+          HostPort: 5432
+          Protocol: tcp
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: DbLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
+        MountPoints:
+        - ContainerPath: /var/lib/postgresql/data
+          SourceVolume: postgres_data
+        Environment:
+        - Name: CELERY_RESULT_BACKEND
+        - Name: DJANGO_DATABASE_HOST
+          Value: db
+        - Name: DJANGO_DATABASE_PORT
+          Value: "5432"
+        - Name: DJANGO_SECRET_KEY
+          Value: DJANGO_SECRET_KEY
+        - Name: DJANGO_SETTINGS_MODULE
+          Value: src.settings
+        - Name: EMAIL_HOST
+        - Name: EMAIL_HOST_PASSWORD
+        - Name: EMAIL_HOST_USER
+        - Name: EMAIL_PORT
+        - Name: OVERRIDE_ROLE_PERMISSION_MIGRATION
+        - Name: POSTGRES_DB
+          Value: postgres
+        - Name: POSTGRES_HOST
+          Value: db
+        - Name: POSTGRES_PASSWORD
+          Value: password
+        - Name: POSTGRES_USER
+          Value: postgres
+      Cpu: 256
+      Memory: 512
+      ExecutionRoleArn:
+        Ref: ECSTaskExecutionRole
+      TaskRoleArn:
+        Ref: ECSRole
+      Family: db
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+      - FARGATE
+      Volumes:
+      - EFSVolumeConfiguration:
+          AuthorizationConfig:
+            AccessPointId:
+              Ref: DbDataAccessPoint
+            IAM: ENABLED
+          FilesystemId:
+            Ref: DbDataFilesystem
+          TransitEncryption: ENABLED
+        Name: postgres_data
+    Type: AWS::ECS::TaskDefinition
+
+  DbLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, 'db', '-', !Ref 'Environment', '-', TaskDefinition]]
+  
+  DbResolverLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, 'db', '-resolver-', !Ref 'Environment', '-', TaskDefinition]]
+
+  DbDataAccessPoint:
+    Properties:
+      AccessPointTags:
+      - Key: Environment
+        Value: dev
+      - Key: Volume
+        Value: postgres_data
+      - Key: Name
+        Value: postgres_data
+      FileSystemId:
+        Ref: DbDataFilesystem
+    Type: AWS::EFS::AccessPoint
+
+  DbDataFilesystem:
+    DeletionPolicy: Retain
+    Properties:
+      Encrypted: true
+      FileSystemTags:
+      - Key: Environment
+        Value: dev
+      - Key: Volume
+        Value: postgres_data
+      - Key: Name
+        Value: postgres_data
+    Type: AWS::EFS::FileSystem
+
+  DbDataNFSMountTargetOnPrivateSubnet0:
+    Properties:
+      FileSystemId:
+        Ref: DbDataFilesystem
+      SecurityGroups:
+      - Ref: FargateContainerSecurityGroup
+      SubnetId: !Ref PrivateSubnet0
+    Type: AWS::EFS::MountTarget
+
+  DbDataNFSMountTargetOnPrivateSubnet1:
+    Properties:
+      FileSystemId:
+        Ref: DbDataFilesystem
+      SecurityGroups:
+      - Ref: FargateContainerSecurityGroup
+      SubnetId: !Ref PrivateSubnet1
+    Type: AWS::EFS::MountTarget
+
+# These are the values output by the CloudFormation template. Be careful
+# about changing any of them, because of them are exported with specific
+# names so that the other task related CF templates can use them.
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref 'ECSCluster'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ClusterName' ] ]
+  ExternalUrl:
+    Description: The url of the external load balancer
+    Value: !Join ['', ['https://', !GetAtt 'PublicLoadBalancer.DNSName']]
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ExternalUrl' ] ]
+  ECSRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt 'ECSRole.Arn'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECSRole' ] ]
+  ECSTaskExecutionRole:
+    Description: The ARN of the ECS role
+    Value: !GetAtt 'ECSTaskExecutionRole.Arn'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ECSTaskExecutionRole' ] ]
+  PublicListener:
+    Description: The ARN of the public load balancer's Listener
+    Value: !Ref PublicLoadBalancerListenerHTTPS
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicListener' ] ]
+  VPCId:
+    Description: The ID of the VPC that this stack is deployed in
+    Value: !Ref 'VPC'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'VPCId' ] ]
+  PublicSubnet0:
+    Description: Public subnet one
+    Value: !Ref 'PublicSubnet0'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnet0' ] ]
+  PublicSubnet1:
+    Description: Public subnet two
+    Value: !Ref 'PublicSubnet1'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PublicSubnet1' ] ]
+  PrivateSubnet0:
+    Description: Private subnet one
+    Value: !Ref 'PrivateSubnet0'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PrivateSubnet0' ] ]
+  PrivateSubnet1:
+    Description: Private subnet two
+    Value: !Ref 'PrivateSubnet1'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'PrivateSubnet1' ] ]
+  FargateContainerSecurityGroup:
+    Description: A security group used to allow Fargate containers to receive traffic
+    Value: !Ref 'FargateContainerSecurityGroup'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'FargateContainerSecurityGroup' ] ]
+  TargetGroupPublicFrontend:
+    Description: The public target group of frontend
+    Value: !Ref 'TargetGroupPublicFrontend'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'group01' ] ]
+  TargetGroupPublicBackend:
+    Description: The public target group of backend
+    Value: !Ref 'TargetGroupPublicBackend'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'group02' ] ]
+  CloudMapId:
+    Description: The ARN of CloudMap
+    Value: !Ref 'CloudMap'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'CloudMapId' ] ]
+  Namespace:
+    Description: The namespace of Parkr containers
+    Value: !Join ['.', [!Ref 'Environment', 'local']]
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'Namespace' ] ]  

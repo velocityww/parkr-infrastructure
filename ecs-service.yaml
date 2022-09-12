@@ -1,0 +1,207 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deploy a service on AWS Fargate, hosted in a private subnet, but accessible via a public load balancer.
+
+Parameters:
+
+  Environment:
+    Description: The name of the environment where the service will be deployed.
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - uat
+      - prod
+    ConstraintDescription: must specify dev/uat/prod. Default is dev
+
+  StackName:
+    Type: String
+    Default: parkr-ecs-cluster
+    Description: The name of the parent Fargate networking stack that you created. Necessary
+                  to locate and reference resources created by that stack.
+
+  ServiceName:
+    Type: String
+    Default: frontend
+    AllowedValues:
+      - frontend
+      - backend
+    ConstraintDescription: must specify frontend/backend. Default is frontend
+    Description: A name for the Parkr service
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: The tag of the application's image
+
+Mappings:
+  frontend:
+    ContainerPort: 
+      Value: 8008
+    ContainerCpu: 
+      Value: 256
+    ContainerMemory: 
+      Value: 512
+    DesiredCount: 
+      Value: 2
+    Priority:
+      Value: 1
+    Group:
+      Value: group01
+  backend:
+    ContainerPort: 
+      Value: 8000
+    ContainerCpu: 
+      Value: 256
+    ContainerMemory: 
+      Value: 512
+    DesiredCount: 
+      Value: 2
+    Priority:
+      Value: 2
+    Group:
+      Value: group02
+  dev:
+    Secret:
+      Value: fVT3wR
+  uat:
+    Secret:
+      Value: 1wqksy
+
+Resources:
+
+  # The task definition. This is a simple metadata description of what
+  # container to run, and what resource requirements it has.
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    # Makes sure the log group is created before it is used.
+    DependsOn: LogGroup
+    Properties:
+      Family: !Ref 'ServiceName'
+      Cpu: !FindInMap [ !Ref 'ServiceName', 'ContainerCpu', 'Value' ]
+      Memory: !FindInMap [ !Ref 'ServiceName', 'ContainerMemory', 'Value' ]
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'ECSTaskExecutionRole']]
+      TaskRoleArn:
+        Fn::ImportValue:
+          !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'ECSRole']]
+      ContainerDefinitions:
+        - Command:
+          - eu-west-1.compute.internal
+          - Fn::ImportValue:
+              !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'Namespace']]
+          Essential: false
+          Image: docker/ecs-searchdomain-sidecar:1.0
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group:
+                Ref: ResolverLogGroup
+              awslogs-region:
+                Ref: AWS::Region
+              awslogs-stream-prefix: ecs
+          Name: !Join ['-', [!Ref 'ServiceName', 'resolver']]    
+        - DependsOn:
+          - Condition: SUCCESS
+            ContainerName: !Join ['-', [!Ref 'ServiceName', 'resolver']]
+          Name: !Ref 'ServiceName'
+          Cpu: !FindInMap [ !Ref 'ServiceName', 'ContainerCpu', 'Value' ]
+          Memory: !FindInMap [ !Ref 'ServiceName', 'ContainerMemory', 'Value' ]
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/parkr-${ServiceName}-${Environment}:${ImageTag}"
+          PortMappings:
+            - ContainerPort: !FindInMap [ !Ref 'ServiceName', 'ContainerPort', 'Value' ]
+          # Send logs to CloudWatch Logs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+          Environment:
+          - Name: CELERY_RESULT_BACKEND
+          - Name: DJANGO_DATABASE_HOST
+            Value: db
+          - Name: DJANGO_DATABASE_PORT
+            Value: "5432"
+          - Name: DJANGO_SECRET_KEY
+            Value: DJANGO_SECRET_KEY
+          - Name: DJANGO_SETTINGS_MODULE
+            Value: src.settings
+          - Name: EMAIL_HOST
+          - Name: EMAIL_HOST_PASSWORD
+          - Name: EMAIL_HOST_USER
+          - Name: EMAIL_PORT
+          - Name: OVERRIDE_ROLE_PERMISSION_MIGRATION
+          - Name: POSTGRES_DB
+            Value: postgres
+          - Name: POSTGRES_HOST
+            Value: db
+          - Name: POSTGRES_PASSWORD
+            Value: password
+          - Name: POSTGRES_USER
+            Value: postgres
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, !Ref ServiceName, '-', !Ref 'Environment', '-', TaskDefinition]]
+
+  ResolverLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, !Ref ServiceName, '-resolver-', !Ref 'Environment', '-', TaskDefinition]]
+
+  Service:
+    Type: AWS::ECS::Service
+    Properties:
+      # ServiceName: !Ref 'ServiceName'
+      Cluster:
+        Fn::ImportValue:
+          !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'ClusterName']]
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: !FindInMap [ !Ref 'ServiceName', 'DesiredCount', 'Value' ]
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'FargateContainerSecurityGroup']]
+          Subnets:
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'PrivateSubnet0']]
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'PrivateSubnet1']]
+      TaskDefinition: !Ref 'TaskDefinition'
+      LoadBalancers:
+        - ContainerName: !Ref 'ServiceName'
+          ContainerPort: !FindInMap [ !Ref 'ServiceName', 'ContainerPort', 'Value' ]
+          TargetGroupArn:
+            Fn::ImportValue:
+              !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", !FindInMap [ !Ref 'ServiceName', 'Group', 'Value' ]]]
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - ServiceDiscoveryEntry
+          - Arn
+
+  ServiceDiscoveryEntry:
+    Properties:
+      Description: 'Service discovery entry in Cloud Map'
+      DnsConfig:
+        DnsRecords:
+        - TTL: 60
+          Type: A
+        RoutingPolicy: MULTIVALUE
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      Name: !Ref 'ServiceName'
+      NamespaceId: 
+        Fn::ImportValue:
+          !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'CloudMapId']]
+    Type: AWS::ServiceDiscovery::Service
