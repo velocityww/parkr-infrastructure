@@ -26,6 +26,7 @@ Parameters:
     AllowedValues:
       - frontend
       - backend
+      - celery
     ConstraintDescription: must specify frontend/backend. Default is frontend
     Description: A name for the Parkr service
 
@@ -61,12 +62,23 @@ Mappings:
       Value: 2
     Group:
       Value: group02
-  dev:
-    Secret:
-      Value: fVT3wR
-  uat:
-    Secret:
-      Value: 1wqksy
+  celery:
+    ContainerPort: 
+      Value: 8000
+    ContainerCpu: 
+      Value: 256
+    ContainerMemory: 
+      Value: 512
+    DesiredCount: 
+      Value: 2
+    Priority:
+      Value: 2
+    Group:
+      Value: group02
+
+Conditions:
+  IsCelery: !Equals [!Ref ServiceName, 'celery']
+  IsNotCelery: !Not [!Equals [!Ref ServiceName, 'celery']]
 
 Resources:
 
@@ -111,7 +123,14 @@ Resources:
           Name: !Ref 'ServiceName'
           Cpu: !FindInMap [ !Ref 'ServiceName', 'ContainerCpu', 'Value' ]
           Memory: !FindInMap [ !Ref 'ServiceName', 'ContainerMemory', 'Value' ]
-          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/parkr-${ServiceName}-${Environment}:${ImageTag}"
+          Image: !Join
+            - '-'
+            - - !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/parkr"
+              - !If [IsCelery, backend, !If [IsNotCelery, !Sub "${ServiceName}", None]]
+              - !Sub "${Environment}:${ImageTag}"
+          Command: 
+            - !If [IsCelery, celery, '']
+          # !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/parkr-${ServiceName}-${Environment}:${ImageTag}"
           PortMappings:
             - ContainerPort: !FindInMap [ !Ref 'ServiceName', 'ContainerPort', 'Value' ]
           # Send logs to CloudWatch Logs
@@ -156,8 +175,8 @@ Resources:
 
   Service:
     Type: AWS::ECS::Service
+    Condition: IsNotCelery
     Properties:
-      # ServiceName: !Ref 'ServiceName'
       Cluster:
         Fn::ImportValue:
           !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'ClusterName']]
@@ -181,9 +200,38 @@ Resources:
       LoadBalancers:
         - ContainerName: !Ref 'ServiceName'
           ContainerPort: !FindInMap [ !Ref 'ServiceName', 'ContainerPort', 'Value' ]
-          TargetGroupArn:
-            Fn::ImportValue:
-              !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", !FindInMap [ !Ref 'ServiceName', 'Group', 'Value' ]]]
+          TargetGroupArn: 
+            - Fn::ImportValue: 
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", !FindInMap [ !Ref 'ServiceName', 'Group', 'Value' ]]]
+      ServiceRegistries:
+      - RegistryArn:
+          Fn::GetAtt:
+          - ServiceDiscoveryEntry
+          - Arn
+
+    Type: AWS::ECS::Service
+    Condition: IsCelery
+    Properties:
+      Cluster:
+        Fn::ImportValue:
+          !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'ClusterName']]
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 75
+      DesiredCount: !FindInMap [ !Ref 'ServiceName', 'DesiredCount', 'Value' ]
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'FargateContainerSecurityGroup']]
+          Subnets:
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'PrivateSubnet0']]
+            - Fn::ImportValue:
+                !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", 'PrivateSubnet1']]
+      TaskDefinition: !Ref 'TaskDefinition'
       ServiceRegistries:
       - RegistryArn:
           Fn::GetAtt:
