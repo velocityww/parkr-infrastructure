@@ -163,6 +163,12 @@ Resources:
             Value: password
           - Name: POSTGRES_USER
             Value: postgres
+          - Name: OVERRIDE_ROLE_PERMISSION_MIGRATION
+            Value: True
+          - Name: DJANGO_AWS_STORAGE_BUCKET_NAME
+            Value: parkr-ecs-cluster-dev-s3-bucket
+          - Name: DJANGO_USE_AWS_S3_FOR_MEDIA
+            Value: True  
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -201,7 +207,7 @@ Resources:
         - ContainerName: !Ref 'ServiceName'
           ContainerPort: !FindInMap [ !Ref 'ServiceName', 'ContainerPort', 'Value' ]
           TargetGroupArn: 
-            - Fn::ImportValue: 
+            Fn::ImportValue: 
                 !Join ['', [!Ref 'StackName', '-', !Ref 'Environment', ":", !FindInMap [ !Ref 'ServiceName', 'Group', 'Value' ]]]
       ServiceRegistries:
       - RegistryArn:
