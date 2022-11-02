@@ -91,6 +91,18 @@ Mappings:
 
 Resources:
 
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: 'Private'
+      BucketName: !Join
+        - '-'
+        - - Ref: "AWS::StackName"
+          - 's3-bucket'
+    DeletionPolicy: 'Delete'
+    Metadata:
+      Comment: 'Bucket to store data'
+    
   VPC:
     Type: "AWS::EC2::VPC"
     Properties:
@@ -721,6 +733,11 @@ Resources:
                 - elasticfilesystem:ClientMount
                 - elasticfilesystem:ClientWrite
                 - elasticfilesystem:ClientRootAccess
+
+              # Allow the ECS task to read/write access to S3
+                - s3:PutObject
+                - s3:GetObject
+
               Resource: '*'
 
   CloudMap:
@@ -1101,4 +1118,9 @@ Outputs:
     Description: The namespace of Parkr containers
     Value: !Join ['.', [!Ref 'Environment', 'local']]
     Export:
-      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'Namespace' ] ]  
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'Namespace' ] ]
+  S3Bucket:
+    Description: The S3 bucket for Parkr containers
+    Value: !Ref 'S3Bucket'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'S3Bucket' ] ]      

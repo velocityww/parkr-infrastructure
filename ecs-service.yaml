@@ -173,7 +173,7 @@ Resources:
     Properties:
       LogGroupName: !Join ['', [/ecs/, !Ref ServiceName, '-resolver-', !Ref 'Environment', '-', TaskDefinition]]
 
-  Service:
+  ServiceIsNotCelery:
     Type: AWS::ECS::Service
     Condition: IsNotCelery
     Properties:
@@ -208,7 +208,7 @@ Resources:
           Fn::GetAtt:
           - ServiceDiscoveryEntry
           - Arn
-
+  ServiceIsCelery:
     Type: AWS::ECS::Service
     Condition: IsCelery
     Properties:
