@@ -795,26 +795,10 @@ Resources:
     Type: AWS::ServiceDiscovery::Service
 
   RedisTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
     Properties:
       ContainerDefinitions:
-      - Command:
-        - eu-west-1.compute.internal
-        - !Join ['.', [ !Ref 'Environment', 'local']]
-        Essential: false
-        Image: docker/ecs-searchdomain-sidecar:1.0
-        LogConfiguration:
-          LogDriver: awslogs
-          Options:
-            awslogs-group:
-              Ref: RedisResolverLogGroup
-            awslogs-region:
-              Ref: AWS::Region
-            awslogs-stream-prefix: ecs
-        Name: redis_resolver
-      - DependsOn:
-        - Condition: SUCCESS
-          ContainerName: redis_resolver
-        Name: redis
+      - Name: redis
         Cpu: 256
         Memory: 512
         Essential: true
@@ -831,6 +815,23 @@ Resources:
             awslogs-region:
               Ref: AWS::Region
             awslogs-stream-prefix: ecs
+        DependsOn:
+        - ContainerName: redis_resolver
+          Condition: SUCCESS
+      - Name: redis_resolver
+        Command:
+        - eu-west-1.compute.internal
+        - !Join ['.', [ !Ref 'Environment', 'local']]
+        Essential: false
+        Image: docker/ecs-searchdomain-sidecar:1.0
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: RedisResolverLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
       Cpu: 256
       Memory: 512
       ExecutionRoleArn:
@@ -841,7 +842,6 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
       - FARGATE
-    Type: AWS::ECS::TaskDefinition
 
   RedisLogGroup:
     Type: AWS::Logs::LogGroup
@@ -904,26 +904,10 @@ Resources:
     Type: AWS::ServiceDiscovery::Service
 
   DbTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
     Properties:
       ContainerDefinitions:
-      - Command:
-        - eu-west-1.compute.internal
-        - !Join ['.', [ !Ref 'Environment', 'local']]
-        Essential: false
-        Image: docker/ecs-searchdomain-sidecar:1.0
-        LogConfiguration:
-          LogDriver: awslogs
-          Options:
-            awslogs-group:
-              Ref: DbResolverLogGroup
-            awslogs-region:
-              Ref: AWS::Region
-            awslogs-stream-prefix: ecs
-        Name: db-resolver
-      - DependsOn:
-        - Condition: SUCCESS
-          ContainerName: db-resolver
-        Name: db
+      - Name: db
         Cpu: 256
         Memory: 512
         Image: postgres
@@ -965,6 +949,23 @@ Resources:
           Value: password
         - Name: POSTGRES_USER
           Value: postgres
+        DependsOn:
+        - Condition: SUCCESS
+          ContainerName: db-resolver
+      - Name: db-resolver
+        Image: docker/ecs-searchdomain-sidecar:1.0      
+        Command:
+        - eu-west-1.compute.internal
+        - !Join ['.', [ !Ref 'Environment', 'local']]
+        Essential: false
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group:
+              Ref: DbResolverLogGroup
+            awslogs-region:
+              Ref: AWS::Region
+            awslogs-stream-prefix: ecs
       Cpu: 256
       Memory: 512
       ExecutionRoleArn:
@@ -985,7 +986,6 @@ Resources:
             Ref: DbDataFilesystem
           TransitEncryption: ENABLED
         Name: postgres_data
-    Type: AWS::ECS::TaskDefinition
 
   DbLogGroup:
     Type: AWS::Logs::LogGroup
